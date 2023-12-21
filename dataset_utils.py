@@ -55,16 +55,17 @@ class Dataset:
 #         mask_inds_values = self.mask_inds_values[self.mask_inds_values < self.dataset_x.shape[0] - W + 1]
         mask_inds_values = self.mask_inds_values - W + 1
         mask_inds_values = mask_inds_values[mask_inds_values >= 0]
-        periods = self.periods[self.mask_inds_values]
-        periods = periods[periods >= W - 1]
-        dataset_x = sliding_window_view(self.dataset_x, (W, self.dataset_x.shape[-1]))[:, 0][mask_inds_values]
+        periods = np.zeros(self.dataset_x.shape[0], dtype=bool)
+        periods[self.mask_inds_values] = True
+        periods = (self.periods & periods)[W - 1:]
+        dataset_x = sliding_window_view(self.dataset_x, (W, self.dataset_x.shape[-1]))[:, 0][periods]
         dataset_y = self.soft_data.copy()
         sc_y = None
         if scale_target:
             sc_y = MyStandardScaler(dims=1)
             dataset_y = sc_y.fit_transform(dataset_y)
-        dataset_y = dataset_y[-dataset_x.shape[0]:][periods]
-        dataset_x = dataset_x[periods]
+        dataset_y = dataset_y[self.periods[self.mask_inds_values]]
+        dataset_x = dataset_x
         print(dataset_x.shape, dataset_y.shape)
         return dataset_x, dataset_y, sc_y
 
