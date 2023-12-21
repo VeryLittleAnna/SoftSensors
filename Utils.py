@@ -29,6 +29,8 @@ class EarlyStopper:
 
     def early_stop(self, validation_loss, model=None):
         self.counter += 1   
+        if self.counter <= self.start_from_epoch:
+            return False
         if validation_loss < self.min_validation_loss:
             self.min_validation_loss = validation_loss
             self.min_loss_epoch_number = self.counter
@@ -37,7 +39,7 @@ class EarlyStopper:
                 torch.save(model.state_dict(), self.path)
         elif validation_loss > (self.min_validation_loss + self.min_delta) and self.counter > self.start_from_epoch:
             self.counter_not_better += 1
-            if self.counter_not_better >= self.patience:
+            if self.counter_not_better > self.patience:
                 return True
         return False
     
