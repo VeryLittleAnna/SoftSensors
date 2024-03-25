@@ -2,6 +2,10 @@ import torch.nn as nn
 import torch
 # import pandas as pd
 import numpy as np
+from datetime import datetime
+
+from sklearn.model_selection import TimeSeriesSplit
+
 
 
 class RMSELoss(nn.Module):
@@ -65,3 +69,50 @@ def global_seed(seed: int) -> None:
     torch.cuda.manual_seed_all(seed)
     torch.backends.cudnn.benchmark = False
     torch.backends.cudnn.deterministic = True
+    
+class TestFixedSplitter(): 
+    def __init__(self, n_splits=5, max_train_size=None, test_start_index=None, test_end_index=None, train_size_in_folds=None):
+            self.max_train_size = max_train_size
+            self.test_start_index = test_start_index
+            self.test_end_index = test_end_index
+            self.n_splits = n_splits
+    def split(self, X, y=None):
+        n_folds = self.n_splits + 1
+        n_samples = X.shape[0]
+        fold_size = n_samples // n_folds
+        if self.test_start_index is not None:
+             test_start_index = self.test_start_index
+             test_indices = np.arange(self.test_start_index, self.test_end_index)
+             train_indices = np.arange(0, self.test_start_index)
+        else:
+            test_start_index =  n_samples - n_samples // n_folds
+            test_indices = np.arange(test_start_index, n_samples)
+            train_indices = np.arange(0, test_start_index)
+        print(test_start_index, fold_size)
+        train_ends = [test_start_index - i * fold_size for i in range(self.n_splits)]
+        for i, train_end in enumerate(train_ends):
+             if i == len(train_ends) - 1:
+                  yield (
+                       train_indices[0:test_start_index], 
+                       test_indices
+                  )
+             else:
+               yield (
+                  train_indices[max(0, train_end - fold_size):test_start_index],
+                  test_indices
+             )
+       
+       
+        
+class MyTimeSeriesSplitter():
+    def __init__(self, n_splits=5, train_size_in_folds=1):
+          self.train_size_in_folds = train_size_in_folds
+          self.n_splits = n_splits
+          
+    def split(self, X, y=None):  
+        splitter = TimeSeriesSplit(n_splits=self.n_splits,  max_train_size=int(self.train_size_in_folds/(self.n_splits + 1) * X.shape[0]))
+        splitter = iter(splitter.split(X))
+        for i in range(self.train_size_in_folds - 1):
+            next(splitter); 
+        for (train_inds, test_inds) in splitter:
+             yield (train_inds, test_inds)
