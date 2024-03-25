@@ -7,6 +7,7 @@ import torch.nn as nn
 class Generator(nn.Module):
     def __init__(self, input_shape=1, output_shape=2):
         super(Generator, self).__init__()
+        flatten_shape = np.prod(np.array(output_shape))
         self.layers = nn.Sequential(
             nn.Linear(input_shape, 512),
             nn.ReLU(inplace=True),
@@ -14,8 +15,10 @@ class Generator(nn.Module):
             nn.ReLU(inplace=True),
             nn.Linear(256, 128),
             nn.ReLU(inplace=True),
-            nn.Linear(128, output_shape),
+            nn.Linear(128, flatten_shape),
         )
+        if not isinstance(output_shape, int):
+            self.layers.add_module("unflatten", nn.Unflatten(-1, output_shape))
     
     def forward(self, z, y=None):
         # z - noise
@@ -26,10 +29,11 @@ class Generator(nn.Module):
         return x
         
 class Discriminator(nn.Module):
-    def __init__(self, input_shape=2):
+    def __init__(self, input_shape=2, conditional=True):
         super(Discriminator, self).__init__()
+        flatten_shape = np.prod(np.array(input_shape)) + (1 if conditional else False)
         self.layers = nn.Sequential(
-            nn.Linear(input_shape, 256),
+            nn.Linear(flatten_shape, 256),
             nn.LeakyReLU(inplace=True),
             nn.Linear(256, 256),
             nn.LeakyReLU(inplace=True),
@@ -38,9 +42,10 @@ class Discriminator(nn.Module):
             nn.Linear(128, 1),
             nn.Sigmoid() 
         )
+        
     def forward(self, x, y=None):
         if y is not None:
-            x = torch.cat((x, y[:, None]), dim=1)
+            x = torch.cat((x.flatten(1, -1), y[:, None]), dim=1)
         x = self.layers(x).flatten()
         return x
         
@@ -48,8 +53,10 @@ class Discriminator(nn.Module):
 class Regressor(nn.Module):
     def __init__(self, input_shape=1):
         super(Regressor, self).__init__()
+        flatten_shape = np.prod(np.array(input_shape))
         self.layers = nn.Sequential(
-            nn.Linear(input_shape, 512),
+            nn.Flatten(start_dim=1, end_dim=-1), # (batch_size, N, Q) or (batch, N, LAG, Q)
+            nn.Linear(flatten_shape, 512),
             nn.ReLU(inplace=True),
             nn.Dropout(p=0.5),
             nn.Linear(512, 256),
