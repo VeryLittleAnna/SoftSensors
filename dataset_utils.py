@@ -4,6 +4,9 @@ from numpy.lib.stride_tricks import sliding_window_view
 from sklearn.preprocessing import StandardScaler
 
 class MyStandardScaler():
+    """ 
+    StandardScaler for multidimensional data
+    """
     def __init__(self, dims=1):
         self.dims = dims
         self.eps = 1e-15
@@ -30,7 +33,17 @@ class MyStandardScaler():
             return data * self.std[:, None] + self.mean[:, None]
 
 class Dataset:
-    
+    """
+    Class for data loading
+    Args:
+        data (pd.DataFrame) : data for physical variables
+        soft_data (pd.Series) : soft sensor data
+        delay (int) : number of rows to delay for soft data
+        K (int) : parameter of averaging
+        diff (bool) : flag for differentiation physical data
+        periods (string) : path to numpy file with bool values (1 for stable period)
+        
+    """
     def __init__(self, data, soft_data, delay=0, K=60, diff=False, periods=None):
         self.K = K
         data = data.groupby(data.index // K).mean().to_numpy() #усреднение
@@ -42,7 +55,6 @@ class Dataset:
         if diff:
             data = np.diff(data, axis=0)
         self.dataset_x = self.sc_x.fit_transform(data)
-#         self.dataset_x = data
         self.soft_data = soft_data[self.mask_inds].to_numpy()
         if periods is not None:
             with open(periods, "rb") as f:
@@ -52,7 +64,12 @@ class Dataset:
                
       
     def window_view(self, W=5, scale_target=True):
-#         mask_inds_values = self.mask_inds_values[self.mask_inds_values < self.dataset_x.shape[0] - W + 1]
+        """
+        Get window view for physical and soft sensor data. Filter stable periods if necessary
+        Args:
+            W (int) : size of window
+            scale_target (bool) : flag for scaling soft data
+        """
         mask_inds_values = self.mask_inds_values - W + 1
         mask_inds_values = mask_inds_values[mask_inds_values >= 0]
         periods = np.zeros(self.dataset_x.shape[0], dtype=bool)
@@ -61,13 +78,18 @@ class Dataset:
         dataset_x = sliding_window_view(self.dataset_x, (W, self.dataset_x.shape[-1]))[:, 0][periods]
         dataset_y = self.soft_data.copy()
         sc_y = None
+        dataset_y = dataset_y[self.periods[self.mask_inds_values]]
+        assert(abs(dataset_x.shape[0] - dataset_y.shape[0]) <= 1)
+        dataset_x = dataset_x[:dataset_y.shape[0]]
+        dataset_y = dataset_y[:dataset_x.shape[0]]
         if scale_target:
             sc_y = MyStandardScaler(dims=1)
             dataset_y = sc_y.fit_transform(dataset_y)
-        dataset_y = dataset_y[self.periods[self.mask_inds_values]]
-        dataset_x = dataset_x
-        print(dataset_x.shape, dataset_y.shape)
-        return dataset_x, dataset_y, sc_y
+        print("window_view:", dataset_x.shape, dataset_y.shape)
+        if scale_target:
+            return dataset_x, dataset_y, sc_y
+        else:
+            return dataset_x, dataset_y
 
     def inverse_transform(self, X=None, y=None):
         if X is not None:
