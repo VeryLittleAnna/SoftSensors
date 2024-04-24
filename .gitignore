@@ -2,3 +2,5 @@
 *.xlsx
 *.pdf
 __pycache__/
+test.html
+test.ipynb
