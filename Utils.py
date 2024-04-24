@@ -1,7 +1,10 @@
 import torch.nn as nn
 import torch
 import numpy as np
+import pandas as pd
 from sklearn.model_selection import TimeSeriesSplit
+from datetime import datetime
+import pickle
 
 
 class RMSELoss(nn.Module):
@@ -137,3 +140,66 @@ class MyTimeSeriesSplitter():
             next(splitter); 
         for (train_inds, test_inds) in splitter:
              yield (train_inds, test_inds)
+                
+def write_table(R, dataset_x, dataset_y, soft_index, folder=None, mask_train=None, mask_valid=None, mask_test=None, path=None, y_scaler=None, num_fold=0):
+    """
+    Writing results table with prediction target on dataset_x.
+    Args:
+        R : Regressor model
+        dataset_x (torch.tensor) : x data
+        dataset_y (torch.tensor) : target data
+        soft_index (int) : index of soft sensor
+        folder (string) : where to save results. Can be None only with path is None.
+        mask_train (np.array) : mask with the indices of train folds
+        mask_valid (np.array) : mask with the indices of valid folds. Can be None.
+        mask_test (np.array) : mask with the indices of test folds
+        path (string) : where to save table. If None, doesnt save
+        y_scaler (MyStandartScaler) : scaler for target. Can be None
+
+    """
+    y = dataset_y.clone().cpu().detach().numpy()
+    y_pred = R.apply_model(dataset_x, y_scaler=y_scaler)
+    mask = np.zeros(dataset_x.shape[0])
+    mask[:] = -1 
+    mask[mask_train] = 0 #TRAIN
+    if mask_valid is not None:
+        mask[mask_valid] = 1 # VALID
+    mask[mask_test] = 2 #TEST
+    table = pd.DataFrame(np.stack((y, y_pred, mask), axis=1), columns= ['y', 'y_pred', 'mode'])
+    if path is not None:
+        path = f"{folder}/table_{soft_index}_{num_fold}---{path if path is not None else ''}.csv"
+        table.to_csv(path)
+    return table
+
+def pack_results(results, soft_index, folder=None, save_to_file=True, path=None, type_of_test="CV", **kwargs):
+    """
+    Save results from cross-validation in one result pickle table
+    Args:
+         results : list of results tables
+         soft_index (int) : index of sensor
+         folder (string) : where to save pickle. Can be None only with save_to_file == False
+         save_to_file (bool) : flag if save to file
+         path (string) : suffix of file name. If None, current datetime is used.
+         type_of_test (string) : type of cross-validation
+    Return:
+        Pickle file - dict with keys
+            name : name of model 
+            folds : list of results tables
+            params: all parameters for model, cross-validation, data
+            type_of_test: in ["CV", "fixed", "MyTimeSeries"] - type of cross-validation
+            sensor (int) : index of sensor
+    """
+    if "splitter" in kwargs:
+        kwargs.pop('splitter')
+    kwargs['type_of_test'] = type_of_test
+    name = ('cGAN' if 'name' not in kwargs else kwargs['name'])
+    kwargs['name'] = name
+    file = {"name": name, "sensor":SOFT_SENSOR_INDEX, "params":kwargs, "folds":results, "type_of_test":type_of_test}
+    print(file['folds'][-1].mean())
+    if save_to_file:
+        if path is  None:
+            path = datetime.now().strftime("%d-%m-%Y-%H:%M:%S")
+        with open(f"{folder}/{soft_index}/{soft_index}_{type_of_test}_{path}.pickle", "wb") as f:
+            pickle.dump(file, f)
+            print("File saved")
+    return file
