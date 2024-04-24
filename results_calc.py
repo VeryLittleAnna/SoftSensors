@@ -1,18 +1,12 @@
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
 from Utils import RMSELoss
 from sklearn.metrics import r2_score
 from collections import defaultdict
-import plotly
 from scipy import stats
-import plotly.express as px
-import statsmodels.api as sm
 from plotly.subplots import make_subplots
 import plotly.graph_objects as go
-from sklearn.metrics import mean_absolute_error, mean_squared_error, mean_absolute_percentage_error, r2_score, hinge_loss
 from scipy.stats import pearsonr, spearmanr
-import plotly.offline as pyo
 import pickle
 import os
 
@@ -20,6 +14,9 @@ METRICS = ["corr", "pvalue", "r2", "rmse", "mae"]
 
 rmse = RMSELoss()
 def compute_metrics(y, y_pred, answer=None):
+    """
+    Compute metrics: RMSE, correlation and its p-value, R2, MAE
+    """
     if answer is None:
         answer = dict()
     answer['rmse'] = rmse(y_pred, y).item()
@@ -29,6 +26,9 @@ def compute_metrics(y, y_pred, answer=None):
     return answer
 
 def reduce(metrics):
+    """
+    Averaging metrics for several folds 
+    """
     answer = defaultdict(float)
     for m in metrics:
         for (key, value) in m.items():
@@ -39,6 +39,9 @@ def reduce(metrics):
 
 
 class EvalModel:
+    """
+    Class for calculating plots for one results table
+    """
     def __init__(self, plot=True, display=False, type_of_test="CV"):
         self.plot = plot 
         self.display = display 
@@ -47,12 +50,10 @@ class EvalModel:
         
     def _calcCV(self, results, name, metrics, y_pred_all, y_true_all, sizes):
         reduced_metrics = reduce(metrics)
-        m = pd.concat([pd.DataFrame(reduced_metrics, index=["reduced"]), pd.DataFrame(metrics)])
+        m = pd.DataFrame(metrics)
 
         fig = make_subplots(rows=2, cols=2, specs=[[{"colspan": 2}, None], [{}, {}]],
                             subplot_titles=("Прогноз", "Гетероскедастичность", "Q-Q график"))
-        # fig.add_trace(go.Scatter(x=np.arange(y_pred_all.shape[0]), y=y_pred_all, mode='lines', name="LAB (pred)",
-        #                      marker=dict(size=5, color="red")), row=1, col=1)
         xs = np.cumsum([0] + [len(x) for x  in y_pred_all])
         y_true_all = np.concatenate(y_true_all)
         fig.add_trace(go.Scatter(x=np.arange(y_true_all.shape[0]), y=y_true_all, mode='lines', name="true",
@@ -82,14 +83,15 @@ class EvalModel:
         fig.update_layout(height=600, width=800, title_text=f"{name} {results['sensor']} {self.type_of_test}")
         
         self.display and fig.show()
+        m = pd.concat([pd.DataFrame(reduced_metrics, index=["reduced"]), m])
+
         return m, fig
 
     def _calcFixed(self, results, name, metrics, y_pred_all, y_true_all, sizes):
         for i in range(len(metrics)):
             metrics[i]['train_size'] = sizes[i]
         reduced_metrics = reduce(metrics)
-        m = pd.concat([pd.DataFrame(reduced_metrics, index=["reduced"]), pd.DataFrame(metrics)])
-
+        m = pd.DataFrame(metrics)
         fig = make_subplots(rows=2, cols=2, specs=[[{"colspan": 2}, None], [{}, {}]],
                             subplot_titles=("Прогноз", "Зависимость от размера: RMSE, MAE", "Зависимость от размера: corr, r2"))
         # fig.add_trace(go.Scatter(x=np.arange(y_pred_all.shape[0]), y=y_pred_all, mode='lines', name="LAB (pred)",
@@ -111,13 +113,14 @@ class EvalModel:
         fig.add_trace(go.Scatter(x=sizes, y=m['corr'], mode='lines', name='corr', marker=dict(size=5, color='gray')), row=2, col=2)  
 
         self.display and fig.show()
+        m = pd.concat([pd.DataFrame(reduced_metrics, index=["reduced"]), m])
         return m, fig
 
     def _calcTimeSeries(self, results, name, metrics, y_pred_all, y_true_all, sizes):
         for i in range(len(metrics)):
             metrics[i]['train_size'] = sizes[i]
         reduced_metrics = reduce(metrics)
-        m = pd.concat([pd.DataFrame(reduced_metrics, index=["reduced"]), pd.DataFrame(metrics)])
+        m = pd.DataFrame(metrics)
 
         fig = make_subplots(rows=2, cols=2, specs=[[{"colspan": 2}, None], [{}, {}]],
                             subplot_titles=("Прогноз", "Зависимость от размера: RMSE, MAE", "Зависимость от размера: corr, r2"))
@@ -140,10 +143,10 @@ class EvalModel:
         fig.add_trace(go.Scatter(x=sizes, y=m['corr'], mode='lines', name='corr', marker=dict(size=5, color='gray')), row=2, col=2)  
 
         self.display and fig.show()
+        m = pd.concat([pd.DataFrame(reduced_metrics, index=["reduced"]), m])
         return m, fig
 
     def __call__(self, results, name):
-        folds = len(results["folds"])
         y_true_all, y_pred_all = [], []
         metrics = []
         sizes = []
@@ -159,7 +162,16 @@ class EvalModel:
         return m, fig
     
 
-def recalculate(folder=None, paths=None, plots_folder=None, type_of_test=None):
+def recalculate(folder=None, plots_folder=None, type_of_test=None, FOLDS_NUMBER=dict(), verbose=False):
+    """
+    Calcutate plots for each result table in folders or paths.
+    Args:
+        folder (string or List[string]) : folders with results
+        plots_folder (string) : folder where plots html will be saved
+        type_of_test (string) : type of cross-validation experiments in ["CV", "fixed", "TimeSeries"]
+        FOLDS_NUMBER (dict) : requiremets for folds number and size 
+        verbose (bool) : flag to write more information
+    """
     if folder is not None:
         if isinstance(folder, list):
             paths = [(os.path.join(folder_, x), x) for folder_ in folder for x in os.listdir(folder_) if 'pickle' in x]
@@ -177,22 +189,26 @@ def recalculate(folder=None, paths=None, plots_folder=None, type_of_test=None):
             results_df.iloc[cnt]['test_fold'] = -1 #file['test_fold']
         if type_of_test is not None and file['type_of_test'] != type_of_test:
             continue
+        continue_flag = False
+        for x in FOLDS_NUMBER[type_of_test].keys():
+            if x not in file['params'] or file['params'][x] != FOLDS_NUMBER[type_of_test][x]:
+                continue_flag = True
+        if continue_flag:
+            verbose and print("Skipped:", path)
+            continue
         plot_filename = os.path.join(plots_folder, f"{filename}.html")
         dashboard = open(plot_filename, 'w')
         dashboard.write("<html><head></head><body>" + "\n")
-        # metrics, fig = eval_model(file, file['name'], plot=True, type_of_test=type_of_test)
         metrics, fig = EvalModel(plot=True, display=False, type_of_test=type_of_test)(file, file['name'])
         inner_html = fig.to_html(include_plotlyjs=True).split('<body>')[1].split('</body>')[0]
         dashboard.write(inner_html)
         dashboard.write(pd.DataFrame(metrics).to_html())
-        # include_plotlyjs = False
         dashboard.write("</body></html>" + "\n")
         dashboard.close()
         results_df.iloc[cnt]['name'] = file['name']
    
         results_df.iloc[cnt]['type_of_test'] = file['type_of_test']
-        if type_of_test == 'CV':
-            results_df.iloc[cnt][METRICS] = metrics.iloc[0][METRICS].values
+        results_df.iloc[cnt][METRICS] = metrics.iloc[0][METRICS].values
         results_df.iloc[cnt]['params'] = file['params']
         results_df.iloc[cnt]['table_path'] = path 
         results_df.iloc[cnt]['plot_path'] = plot_filename
