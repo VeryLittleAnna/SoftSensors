@@ -194,7 +194,7 @@ def pack_results(results, soft_index, folder=None, save_to_file=True, path=None,
     kwargs['type_of_test'] = type_of_test
     name = ('cGAN' if 'name' not in kwargs else kwargs['name'])
     kwargs['name'] = name
-    file = {"name": name, "sensor":SOFT_SENSOR_INDEX, "params":kwargs, "folds":results, "type_of_test":type_of_test}
+    file = {"name": name, "sensor":soft_index, "params":kwargs, "folds":results, "type_of_test":type_of_test}
     print(file['folds'][-1].mean())
     if save_to_file:
         if path is  None:

@@ -317,3 +317,30 @@ class RnnDiscriminator(DiscriminatorBaseClass):
         x = self.rnn_layers(x)
         output = torch.sigmoid(self.out(x)).flatten()
         return output
+    
+    
+class Autoencoder(nn.Module):
+    """
+    RNN-based autoencoder to feature extraction
+    Args:
+        input_size (int or tuple) : shape of noize. 
+        latent_shape (int) : size of latent features
+        hidden_size (int) : number of hidden units in GRU
+        n_layers (int) : number of layers in GRU
+    
+    """
+    def __init__(self, input_size=57, hidden_size=20, n_layers=1, latent_shape=10):
+        super(Autoencoder, self).__init__()
+        self.embedder = RNN_Block(n_layers=n_layers, 
+                    input_size=input_size,
+                    hidden_size=hidden_size, 
+                    output_size=latent_shape)
+        self.recovery = RNN_Block(n_layers=n_layers, 
+                    input_size=latent_shape,
+                    hidden_size=hidden_size, 
+                    output_size=input_size)
+
+    def forward(self, x):
+        H = self.embedder(x)
+        X_tilde = self.recovery(H)
+        return X_tilde
