@@ -1,14 +1,13 @@
 import torch.nn as nn
 import torch
-# import pandas as pd
 import numpy as np
-from datetime import datetime
-
 from sklearn.model_selection import TimeSeriesSplit
 
 
-
 class RMSELoss(nn.Module):
+    """
+    Class for RMSE loss as pytorch losses
+    """
     def __init__(self):
         super().__init__()
         self.mse = nn.MSELoss()
@@ -21,6 +20,14 @@ class RMSELoss(nn.Module):
         return torch.sqrt(self.mse(output, target))
 
 class EarlyStopper:
+    """
+    Class for early stopping model during training.
+    Args:
+        patience (int) : number of epochs with no improvement after which training will be stopped
+        min_delta (float) : change to qualify as improvement
+        start_from_epoch (int) : number of epoches not to monitore loss
+        path (string) : path for saving best model if not None
+    """
     def __init__(self, patience=1, min_delta=0, start_from_epoch=0, path=None):
         self.patience = patience
         self.min_delta = min_delta
@@ -54,6 +61,9 @@ class EarlyStopper:
         return model
     
 def MAPE(target, output):
+    """
+    MAPE metric (mean absolute percentage error)
+    """
     target = np.maximum(np.abs(np.array(target)), 1e-15)
     output = np.array(output)
     mape = np.mean(np.abs(target - output) / target, axis=-1)
@@ -63,7 +73,6 @@ def global_seed(seed: int) -> None:
     """
     Set global seed for reproducibility.
     """
-
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
@@ -71,8 +80,15 @@ def global_seed(seed: int) -> None:
     torch.backends.cudnn.deterministic = True
     
 class TestFixedSplitter(): 
-    def __init__(self, n_splits=5, max_train_size=None, test_start_index=None, test_end_index=None, train_size_in_folds=None):
-            self.max_train_size = max_train_size
+    """
+    Cross-validation splitter with fixed test fold. Train sample is several folds just before test.
+    Args:
+        n_splits (int) : number of splits (n_folds - 1)
+        max_train_size_in_folds (int) : minimum number of folds in train
+        test_start_index (int) : index in dataset for start test fold. If None - test fold is the last one
+        test_end_index (int) : index in dataset for end test fold.
+    """
+    def __init__(self, n_splits=5, test_start_index=None, test_end_index=None, train_size_in_folds=None):
             self.test_start_index = test_start_index
             self.test_end_index = test_end_index
             self.n_splits = n_splits
@@ -102,9 +118,14 @@ class TestFixedSplitter():
                   test_indices
              )
        
-       
         
 class MyTimeSeriesSplitter():
+    """
+    Ordinary cross-validation scheme for time series. Fixed sizes of train and test, test fold follows train.
+    Args:
+        n_splits (int) : number of folds - 1
+        train_size_in_folds (int) : fixed number of folds in train
+    """
     def __init__(self, n_splits=5, train_size_in_folds=1):
           self.train_size_in_folds = train_size_in_folds
           self.n_splits = n_splits
