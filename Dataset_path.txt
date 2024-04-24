@@ -1,0 +1,2 @@
+wizard.cs.msu.ru
+D:\Grinenko\soft_sensors\Dataset1.csv
